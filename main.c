@@ -1,8 +1,8 @@
 #include <time.h>
 #include <ncursesw/curses.h>
 #include "greenhouse.h"
-#include <unistd.h>
 #include <string.h>
+#include <stdint.h>
 
 enum greenhouse_states current_state;
 enum greenhouse_states next_state;
@@ -42,6 +42,12 @@ void init_fsm(){
     g_time = time(NULL);
 }
 
+uint64_t get_time_ms() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (ts.tv_sec * 1000) + (ts.tv_nsec / 1000000);
+}
+
 int main(int argv, char* argc[]) {
 
     // Code to allow "-h" and "--help"
@@ -64,137 +70,145 @@ int main(int argv, char* argc[]) {
     saved_2time = g_time;
     saved_3time = g_time;
 
+    uint64_t last_run = 0;
+    uint64_t interval = 50;
+
 	init_fsm();
 
     // While loop for the FSM state control.
     while (1) {
-    	usleep(10000);
-        int key = getch();
-        hourCycle = g_time - saved_time;
-        moistureDecay = g_time - saved_2time;
-        tempDecay = g_time - saved_3time;
-        g_time = time(NULL);
 
-        dayTrack();
-        dryTrack();
-        tempTrack();
+        uint64_t now = get_time_ms();               // CODE NEEDED TO BE SLOWED DOWN
+            if (now - last_run >= interval) {       // Was running so fast it would cause the program to be unable to continue
+                last_run = now;                     // Now will run whenever the time since last run is greater than the interval.
 
-        if (key == 'w') {
-            moisture = 20; 
-        }
-		if (key == 'c') {
-			temperature = 20;
+	        int key = getch();
+	        hourCycle = g_time - saved_time;
+	        moistureDecay = g_time - saved_2time;
+	        tempDecay = g_time - saved_3time;
+	        g_time = time(NULL);
+
+	        dayTrack();
+	        dryTrack();
+	        tempTrack();
+
+	        if (key == 'w') {
+	            moisture = 20; 
+	        }
+			if (key == 'c') {
+				temperature = 20;
+			}
+	        if (key == 'h') {
+	        	temperature = 100;
+	        }
+	        if (key == 'd') {
+	            day = 1;
+	            night = 0;
+	        }
+	        if (key == 'n') {
+	            day = 0;
+	            night = 1;
+	        }
+	        if (key == 'q') {
+	            next_state = EXIT;
+	        }
+
+			printw("Temp : %d  |   Moisture : %d  |  Day = %d  |   Night = %d         ", temperature, moisture, day, night);
+
+	        current_state = next_state;
+	        switch (current_state) {
+	            case MONITOR:
+	                if (moisture < 40) {
+	                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
+	                    next_state = WATER;
+	                }
+	                else if (temperature < 50 && night) {
+	                    printw("COLD NIGHTTIME -> ACTIVATE HEATERS\n");
+	                    next_state = HEAT;
+	                }
+	                else if (temperature < 60 && day) {
+	                    printw("COLD DAYTIME -> ACTIVATE HEATERS\n");
+	                    next_state = HEAT;
+	                }
+	                else if (temperature > 70 && night) {
+	                    printw("HOT NIGHTTIME -> ACTIVATE A/C\n");
+	                    next_state = COOL;
+	                } 
+	                else if (temperature > 80 && day) {
+	                    printw("HOT DAYTIME -> ACTIVATE A/C\n");
+	                    next_state = COOL;
+	                }
+	                else {
+	                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
+	                    next_state = MONITOR; 
+	                }
+	                break;
+
+	            case HEAT:
+	                heatersOn();
+	                if (moisture < 40) {
+	                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
+	                    next_state = WATER;
+	                }
+	                else if (temperature > 60 && night) {
+	                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
+	                    next_state = MONITOR;
+	                } 
+	                else if (temperature > 70 && day) {
+	                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
+	                    next_state = MONITOR;
+	                }
+	                else if (day) {
+	                	printw("COLD DAYTIME -> ACTIVATE HEATERS\n");
+	                	next_state = HEAT;
+	                } 
+	                else {
+	                    printw("COLD NIGHTTIME -> ACTIVATE HEATERS\n");
+	                    next_state = HEAT; 
+	                }
+	                break;
+
+	            case COOL:
+	                coolingOn();
+	                if (moisture < 40) {
+	                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
+	                    next_state = WATER;
+	                }
+	                else if (temperature < 60 && night) {
+	                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
+	                    next_state = MONITOR;
+	                } 
+	                else if (temperature < 70 && day) {
+	                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
+	                    next_state = MONITOR;
+	                }
+	                else if (day){
+	                    printw("HOT DAYTIME -> ACTIVATE A/C\n");
+	                    next_state = COOL; 
+	                }
+	                else {
+	                	printw("HOT NIGHTTIME -> ACTIVATE A/C\n");
+	                	next_state = COOL;
+	                }
+	                break;
+
+	            case WATER:
+	                hydrate();
+	                if (moisture > 90) {
+	                	printw("ACTIVELY MONITORING -> ALL GOOD\n");
+	                	next_state = MONITOR;
+	                }
+	                else {
+	                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
+	                    next_state = WATER;
+	                }
+	                break;
+	                
+	            case EXIT:
+	                endwin();
+	                return 0;
+	                break;
+	                }
 		}
-        if (key == 'h') {
-        	temperature = 100;
-        }
-        if (key == 'd') {
-            day = 1;
-            night = 0;
-        }
-        if (key == 'n') {
-            day = 0;
-            night = 1;
-        }
-        if (key == 'q') {
-            next_state = EXIT;
-        }
-
-		printw("Temp : %d  |   Moisture : %d  |  Day = %d  |   Night = %d         ", temperature, moisture, day, night);
-
-        current_state = next_state;
-        switch (current_state) {
-            case MONITOR:
-                if (moisture < 40) {
-                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
-                    next_state = WATER;
-                }
-                else if (temperature < 50 && night) {
-                    printw("COLD NIGHTTIME -> ACTIVATE HEATERS\n");
-                    next_state = HEAT;
-                }
-                else if (temperature < 60 && day) {
-                    printw("COLD DAYTIME -> ACTIVATE HEATERS\n");
-                    next_state = HEAT;
-                }
-                else if (temperature > 70 && night) {
-                    printw("HOT NIGHTTIME -> ACTIVATE A/C\n");
-                    next_state = COOL;
-                } 
-                else if (temperature > 80 && day) {
-                    printw("HOT DAYTIME -> ACTIVATE A/C\n");
-                    next_state = COOL;
-                }
-                else {
-                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
-                    next_state = MONITOR; 
-                }
-                break;
-
-            case HEAT:
-                heatersOn();
-                if (moisture < 40) {
-                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
-                    next_state = WATER;
-                }
-                else if (temperature > 60 && night) {
-                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
-                    next_state = MONITOR;
-                } 
-                else if (temperature > 70 && day) {
-                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
-                    next_state = MONITOR;
-                }
-                else if (day) {
-                	printw("COLD DAYTIME -> ACTIVATE HEATERS\n");
-                	next_state = HEAT;
-                } 
-                else {
-                    printw("COLD NIGHTTIME -> ACTIVATE HEATERS\n");
-                    next_state = HEAT; 
-                }
-                break;
-
-            case COOL:
-                coolingOn();
-                if (moisture < 40) {
-                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
-                    next_state = WATER;
-                }
-                else if (temperature < 60 && night) {
-                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
-                    next_state = MONITOR;
-                } 
-                else if (temperature < 70 && day) {
-                    printw("ACTIVELY MONITORING -> ALL GOOD\n");
-                    next_state = MONITOR;
-                }
-                else if (day){
-                    printw("HOT DAYTIME -> ACTIVATE A/C\n");
-                    next_state = COOL; 
-                }
-                else {
-                	printw("HOT NIGHTTIME -> ACTIVATE A/C\n");
-                	next_state = COOL;
-                }
-                break;
-
-            case WATER:
-                hydrate();
-                if (moisture > 90) {
-                	printw("ACTIVELY MONITORING -> ALL GOOD\n");
-                	next_state = MONITOR;
-                }
-                else {
-                    printw("REQUIRE WATER -> ACTIVATE SPRINKLERS\n");
-                    next_state = WATER;
-                }
-                break;
-                
-            case EXIT:
-                endwin();
-                return 0;
-                break;
-        }
     }
 }
