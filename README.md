@@ -1,4 +1,5 @@
 **Greenhouse Manager Finite State Machine**
+
 A finite state machine to manage a greenhouse temperature and soil mositure using the ncurses library.
 
 ## OVERVIEW
@@ -24,7 +25,9 @@ The program will take these modifications and switch states, changing these valu
 It is necessary for ncurses to be installed on the system for this FSM to function.
 
 This program can be built using the command
+
 `gcc main.c greenhouse.c -lncurses -o fsm`
 
 To adjust the length of the day in seconds, the rate of the soil drying out in seconds, and the rate of the temperature change, add this line right after gcc. Replace day_length, dryout_time, and temp_time with your desired value in seconds.
+
 `-DDAY_LENGTH=$(day_length) -DDRYOUT_TIME=$(dryout_time) -DTEMP_TIME=$(temp_time)`
